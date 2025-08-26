@@ -1,0 +1,100 @@
+version: "3.9"
+
+volumes:
+  n8n_data:
+  pg_data:
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: n8n
+      POSTGRES_DB: n8n
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]  # ← no disk writes
+
+  n8n:  # UI / webhooks / cron
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      TZ: Europe/Zagreb
+      GENERIC_TIMEZONE: Europe/Zagreb
+
+      # Security (change these!)
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: igor
+      N8N_BASIC_AUTH_PASSWORD: changeme
+
+      # Credentials persistence
+      N8N_ENCRYPTION_KEY: 8f3b2f1d6a0b4f37e3b6a7c9b1f2d3e48c0a9b6d1c3e5f7a9d2c4e6f8a0b2c3
+
+      # Public URL (adjust if you later put a proxy on HTTPS)
+      N8N_SECURE_COOKIE: "false"
+      N8N_HOST: 49.13.225.178
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://49.13.225.178:5678/
+
+      # Queue mode
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+
+      # DB → Postgres (shared across main + workers)
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: n8n
+
+      # Execution log hygiene (tune to taste)
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: "false"
+      EXECUTIONS_DATA_SAVE_ON_ERROR: "all"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "336"
+      EXECUTIONS_DATA_PRUNE_HARD_DELETE: "true"
+      N8N_DISABLE_PRODUCTION_MAIN_PROCESS: "true"
+      N8N_RUNNERS_ENABLED: "true"
+      OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS: "true"
+
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  n8n-worker:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Zagreb
+      GENERIC_TIMEZONE: Europe/Zagreb
+
+      # Queue mode
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+
+      # DB — must match main
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: n8n
+
+      # Encryption key — must match main exactly
+      N8N_ENCRYPTION_KEY: 8f3b2f1d6a0b4f37e3b6a7c9b1f2d3e48c0a9b6d1c3e5f7a9d2c4e6f8a0b2c3
+    depends_on:
+      - postgres
+      - redis
+    entrypoint: /docker-entrypoint.sh
+    command: worker --concurrency=5

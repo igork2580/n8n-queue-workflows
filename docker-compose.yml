@@ -32,8 +32,6 @@ services:
 
       # Security (change these!)
       N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: igor
-      N8N_BASIC_AUTH_PASSWORD: changeme
 
       # Credentials persistence
       N8N_ENCRYPTION_KEY: 8f3b2f1d6a0b4f37e3b6a7c9b1f2d3e48c0a9b6d1c3e5f7a9d2c4e6f8a0b2c3
